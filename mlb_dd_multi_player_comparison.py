@@ -54,7 +54,7 @@ def hitter_score(row):
         iso = row.get("ISO", 0)
         k_pct = 1 - row.get("K%", 0)
         bb_pct = row.get("BB%", 0)
-        score = avg * 0.25 + iso * 0.25 + k_pct * 0.25 + bb_pct * 0.25
+        score = (avg or 0) * 0.25 + (iso or 0) * 0.25 + (k_pct or 0) * 0.25 + (bb_pct or 0) * 0.25
         return score
     except:
         return 0
@@ -64,7 +64,7 @@ def pitcher_score(row):
         era = 1 - row.get("ERA", 5) / 5
         k9 = row.get("K/9", 0) / 15
         bb9 = 1 - row.get("BB/9", 0) / 5
-        score = era * 0.4 + k9 * 0.35 + bb9 * 0.25
+        score = (era or 0) * 0.4 + (k9 or 0) * 0.35 + (bb9 or 0) * 0.25
         return score
     except:
         return 0
@@ -98,6 +98,8 @@ with tab1:
                 qs = 25
             st.success(f"{name} (Hitter)")
             st.metric("OVR", ovr)
+            st.write("Debug Stats:", row.to_dict())
+            st.write("Debug Stats:", row.to_dict())
             st.metric("QS Value", qs)
             found = True
 
@@ -111,6 +113,8 @@ with tab1:
                 qs = 25
             st.success(f"{name} (Pitcher)")
             st.metric("OVR", ovr)
+            st.write("Debug Stats:", row.to_dict())
+            st.write("Debug Stats:", row.to_dict())
             st.metric("QS Value", qs)
             found = True
 
