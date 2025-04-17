@@ -1,3 +1,5 @@
 streamlit
-pybaseball
 pandas
+numpy
+pybaseball
+scikit-learn
