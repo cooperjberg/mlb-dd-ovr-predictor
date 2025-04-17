@@ -1,11 +1,9 @@
 import streamlit as st
 from pybaseball import batting_stats, pitching_stats
 import pandas as pd
-import numpy as np
 
-st.set_page_config(page_title="Diamond Dynasty OVR Predictor", layout="wide")
-
-st.title("💎 Diamond Dynasty OVR Predictor with Investment Tracking")
+st.set_page_config(page_title="Diamond Dynasty Full App", layout="wide")
+st.title("💎 Diamond Dynasty OVR Tracker")
 
 @st.cache_data
 def load_data():
@@ -56,30 +54,26 @@ def pitcher_score(row):
     weights = {"ERA": 0.25, "K/9": 0.2, "BB/9": 0.15, "H/9": 0.15, "FIP": 0.15, "FBv": 0.1}
     return sum(vals[k] * weights[k] for k in vals)
 
-tab1, tab2 = st.tabs(["📈 Leaderboard", "💸 Investment Tracker"])
+tab1, tab2, tab3 = st.tabs(["🏆 Leaderboard", "💸 Investment Tracker", "🎯 Predict One Player"])
 
 with tab1:
     st.subheader("🏆 Best Value Buy Leaderboard")
-    df_hitters = batting_df.copy()
-    df_hitters = df_hitters[df_hitters["PA"] > 30]
-    df_hitters = df_hitters[df_hitters.columns.intersection(["Name", "Team", "AVG", "ISO", "K%", "BB%", "SLG", "wOBA"])]
+    df_hitters = batting_df[batting_df["PA"] > 30].copy()
     df_hitters["Score"] = df_hitters.apply(hitter_score, axis=1)
     df_hitters["Projected OVR"] = df_hitters["Score"].apply(predict_ovr)
     df_hitters["QS Value"] = df_hitters["Projected OVR"].apply(quick_sell_value)
     df_hitters["Type"] = "Hitter"
 
-    df_pitchers = pitching_df.copy()
-    df_pitchers = df_pitchers[df_pitchers["IP"] > 5]
+    df_pitchers = pitching_df[pitching_df["IP"] > 5].copy()
     df_pitchers["Score"] = df_pitchers.apply(pitcher_score, axis=1)
     df_pitchers["Projected OVR"] = df_pitchers["Score"].apply(predict_ovr)
     df_pitchers["QS Value"] = df_pitchers["Projected OVR"].apply(quick_sell_value)
     df_pitchers["Type"] = "Pitcher"
 
-    full_df = pd.concat([df_hitters[["Name", "Team", "Projected OVR", "QS Value", "Type"]],
-                         df_pitchers[["Name", "Team", "Projected OVR", "QS Value", "Type"]]])
+    leaderboard = pd.concat([df_hitters[["Name", "Team", "Projected OVR", "QS Value", "Type"]],
+                             df_pitchers[["Name", "Team", "Projected OVR", "QS Value", "Type"]]])
 
-    best_value = full_df[full_df["Projected OVR"] >= 80].sort_values(by="QS Value", ascending=False)
-    st.dataframe(best_value.head(20), use_container_width=True)
+    st.dataframe(leaderboard.sort_values(by="QS Value", ascending=False).head(25), use_container_width=True)
 
 with tab2:
     st.subheader("📊 Track Your Investments (Session Only)")
@@ -102,3 +96,41 @@ with tab2:
     if st.session_state.investments:
         inv_df = pd.DataFrame(st.session_state.investments)
         st.dataframe(inv_df.sort_values(by="Estimated Profit", ascending=False), use_container_width=True)
+
+with tab3:
+    st.subheader("🎯 Predict One Player")
+
+    search_name = st.text_input("Enter full player name (case sensitive)", value="Chris Bassitt")
+
+    if search_name:
+        found = False
+        if search_name in pitching_df["Name"].values:
+            row = pitching_df[pitching_df["Name"] == search_name].iloc[0]
+            score = pitcher_score(row)
+            ovr = predict_ovr(score)
+            qs = quick_sell_value(ovr)
+            st.success(f"**{search_name} (Pitcher)**")
+            st.metric("ERA", round(row["ERA"], 2))
+            st.metric("K/9", round(row["K/9"], 2))
+            st.metric("BB/9", round(row["BB/9"], 2))
+            st.metric("FIP", round(row["FIP"], 2))
+            st.metric("Fastball Velo", round(row["FBv"], 1))
+            st.metric("🔥 Projected OVR", ovr)
+            st.metric("💰 QS Value", qs)
+            found = True
+        elif search_name in batting_df["Name"].values:
+            row = batting_df[batting_df["Name"] == search_name].iloc[0]
+            score = hitter_score(row)
+            ovr = predict_ovr(score)
+            qs = quick_sell_value(ovr)
+            st.success(f"**{search_name} (Hitter)**")
+            st.metric("AVG", round(row["AVG"], 3))
+            st.metric("ISO", round(row["ISO"], 3))
+            st.metric("K%", round(row["K%"], 3))
+            st.metric("BB%", round(row["BB%"], 3))
+            st.metric("wOBA", round(row["wOBA"], 3))
+            st.metric("🔥 Projected OVR", ovr)
+            st.metric("💰 QS Value", qs)
+            found = True
+        if not found:
+            st.error("Player not found. Please check the spelling and try again.")
