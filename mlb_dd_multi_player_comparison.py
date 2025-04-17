@@ -1,19 +1,54 @@
 import streamlit as st
-from pybaseball import batting_stats, pitching_stats
 import pandas as pd
+import requests
+from bs4 import BeautifulSoup
+from pybaseball import batting_stats, pitching_stats
 
-st.set_page_config(page_title="Diamond Dynasty Full App", layout="wide")
-st.title("💎 Diamond Dynasty OVR Tracker")
+st.set_page_config(page_title="Diamond Dynasty + ShowZone", layout="wide")
+st.title("💎 Diamond Dynasty OVR Tracker with ShowZone Integration")
 
 @st.cache_data
 def load_data():
     return batting_stats(2025), pitching_stats(2025)
 
-batting_df, pitching_df = load_data()
+@st.cache_data
+def scrape_showzone_cards(max_pages=2):
+    base_url = "https://showzone.gg/players?page="
+    all_cards = []
+    for page in range(1, max_pages + 1):
+        url = f"{base_url}{page}"
+        res = requests.get(url)
+        soup = BeautifulSoup(res.text, "html.parser")
+        table = soup.find("table")
+        if not table:
+            continue
+        rows = table.find_all("tr")[1:]
+        for row in rows:
+            cols = row.find_all("td")
+            if len(cols) < 6:
+                continue
+            name = cols[0].text.strip()
+            ovr = cols[1].text.strip()
+            tier = cols[2].text.strip()
+            set_type = cols[3].text.strip()
+            buy_now = cols[4].text.strip().replace(",", "").replace("Stubs", "").strip()
+            sell_now = cols[5].text.strip().replace(",", "").replace("Stubs", "").strip()
+            try:
+                card = {
+                    "Name": name,
+                    "OVR": int(ovr),
+                    "Tier": tier,
+                    "Set": set_type,
+                    "Buy Now": int(buy_now) if buy_now.isnumeric() else None,
+                    "Sell Now": int(sell_now) if sell_now.isnumeric() else None
+                }
+                all_cards.append(card)
+            except:
+                continue
+    return pd.DataFrame(all_cards)
 
-# Session state for investment tracking
-if "investments" not in st.session_state:
-    st.session_state.investments = []
+batting_df, pitching_df = load_data()
+showzone_df = scrape_showzone_cards()
 
 def predict_ovr(score):
     if score >= 0.85: return 90
@@ -31,16 +66,19 @@ def quick_sell_value(ovr):
     return table.get(ovr, 25)
 
 def hitter_score(row):
-    vals = {
-        "AVG": row["AVG"],
-        "ISO": row["ISO"],
-        "K%": 1 - row["K%"],
-        "BB%": row["BB%"],
-        "SLG": row["SLG"],
-        "wOBA": row["wOBA"]
-    }
-    weights = {"AVG": 0.25, "ISO": 0.2, "K%": 0.15, "BB%": 0.1, "SLG": 0.15, "wOBA": 0.15}
-    return sum(vals[k] * weights[k] for k in vals)
+    try:
+        vals = {
+            "AVG": row.get("AVG", 0),
+            "ISO": row.get("ISO", 0),
+            "K%": 1 - row.get("K%", 0),
+            "BB%": row.get("BB%", 0),
+            "SLG": row.get("SLG", 0),
+            "wOBA": row.get("wOBA", 0)
+        }
+        weights = {"AVG": 0.25, "ISO": 0.2, "K%": 0.15, "BB%": 0.1, "SLG": 0.15, "wOBA": 0.15}
+        return sum(vals[k] * weights[k] for k in vals)
+    except:
+        return 0
 
 def pitcher_score(row):
     vals = {
@@ -54,54 +92,11 @@ def pitcher_score(row):
     weights = {"ERA": 0.25, "K/9": 0.2, "BB/9": 0.15, "H/9": 0.15, "FIP": 0.15, "FBv": 0.1}
     return sum(vals[k] * weights[k] for k in vals)
 
-tab1, tab2, tab3 = st.tabs(["🏆 Leaderboard", "💸 Investment Tracker", "🎯 Predict One Player"])
+tab1, tab2 = st.tabs(["🎯 Predict One Player", "📈 ShowZone Live Market"])
 
 with tab1:
-    st.subheader("🏆 Best Value Buy Leaderboard")
-    df_hitters = batting_df[batting_df["PA"] > 30].copy()
-    df_hitters["Score"] = df_hitters.apply(hitter_score, axis=1)
-    df_hitters["Projected OVR"] = df_hitters["Score"].apply(predict_ovr)
-    df_hitters["QS Value"] = df_hitters["Projected OVR"].apply(quick_sell_value)
-    df_hitters["Type"] = "Hitter"
-
-    df_pitchers = pitching_df[pitching_df["IP"] > 5].copy()
-    df_pitchers["Score"] = df_pitchers.apply(pitcher_score, axis=1)
-    df_pitchers["Projected OVR"] = df_pitchers["Score"].apply(predict_ovr)
-    df_pitchers["QS Value"] = df_pitchers["Projected OVR"].apply(quick_sell_value)
-    df_pitchers["Type"] = "Pitcher"
-
-    leaderboard = pd.concat([df_hitters[["Name", "Team", "Projected OVR", "QS Value", "Type"]],
-                             df_pitchers[["Name", "Team", "Projected OVR", "QS Value", "Type"]]])
-
-    st.dataframe(leaderboard.sort_values(by="QS Value", ascending=False).head(25), use_container_width=True)
-
-with tab2:
-    st.subheader("📊 Track Your Investments (Session Only)")
-    with st.form("investment_form"):
-        name = st.text_input("Player Name")
-        buy_price = st.number_input("Buy Price (stubs)", min_value=0, value=0)
-        projected_ovr = st.number_input("Projected OVR", min_value=65, max_value=99, value=75)
-        submit = st.form_submit_button("Add Investment")
-        if submit:
-            qs_val = quick_sell_value(projected_ovr)
-            profit = qs_val - buy_price
-            st.session_state.investments.append({
-                "Player": name,
-                "Buy Price": buy_price,
-                "Projected OVR": projected_ovr,
-                "QS Value": qs_val,
-                "Estimated Profit": profit
-            })
-
-    if st.session_state.investments:
-        inv_df = pd.DataFrame(st.session_state.investments)
-        st.dataframe(inv_df.sort_values(by="Estimated Profit", ascending=False), use_container_width=True)
-
-with tab3:
-    st.subheader("🎯 Predict One Player")
-
-    search_name = st.text_input("Enter full player name (case sensitive)", value="Chris Bassitt")
-
+    st.subheader("🎯 Predict One Player (Stat + Market Lookup)")
+    search_name = st.text_input("Enter full player name (case sensitive)", value="Cedric Mullins")
     if search_name:
         found = False
         if search_name in pitching_df["Name"].values:
@@ -109,12 +104,10 @@ with tab3:
             score = pitcher_score(row)
             ovr = predict_ovr(score)
             qs = quick_sell_value(ovr)
-            st.success(f"**{search_name} (Pitcher)**")
+            st.success(f"{search_name} (Pitcher)")
             st.metric("ERA", round(row["ERA"], 2))
             st.metric("K/9", round(row["K/9"], 2))
             st.metric("BB/9", round(row["BB/9"], 2))
-            st.metric("FIP", round(row["FIP"], 2))
-            st.metric("Fastball Velo", round(row["FBv"], 1))
             st.metric("🔥 Projected OVR", ovr)
             st.metric("💰 QS Value", qs)
             found = True
@@ -123,14 +116,21 @@ with tab3:
             score = hitter_score(row)
             ovr = predict_ovr(score)
             qs = quick_sell_value(ovr)
-            st.success(f"**{search_name} (Hitter)**")
-            st.metric("AVG", round(row["AVG"], 3))
-            st.metric("ISO", round(row["ISO"], 3))
-            st.metric("K%", round(row["K%"], 3))
-            st.metric("BB%", round(row["BB%"], 3))
-            st.metric("wOBA", round(row["wOBA"], 3))
+            st.success(f"{search_name} (Hitter)")
+            st.metric("AVG", round(row.get("AVG", 0), 3))
+            st.metric("ISO", round(row.get("ISO", 0), 3))
+            st.metric("K%", round(row.get("K%", 0), 3))
+            st.metric("BB%", round(row.get("BB%", 0), 3))
             st.metric("🔥 Projected OVR", ovr)
             st.metric("💰 QS Value", qs)
             found = True
-        if not found:
-            st.error("Player not found. Please check the spelling and try again.")
+        sz_match = showzone_df[showzone_df["Name"].str.contains(search_name, case=False, na=False)]
+        if not sz_match.empty:
+            st.subheader("ShowZone Card Info")
+            st.dataframe(sz_match.reset_index(drop=True), use_container_width=True)
+        if not found and sz_match.empty:
+            st.error("Player not found. Please check the spelling or try another.")
+
+with tab2:
+    st.subheader("📈 ShowZone Live Market")
+    st.dataframe(showzone_df, use_container_width=True)
