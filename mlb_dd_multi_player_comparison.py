@@ -141,7 +141,7 @@ qs = QS.get(ovr_key, 25)
             st.metric("💰 Quick Sell", qs)
             found = True
         # Pitcher?
-        if name in pitching_df["Name"].values:
+        if "Name" in pitching_df.columns and name in pitching_df["Name"].values:
             row = pitching_df[pitching_df["Name"]==name].iloc[0]
             score = pitcher_score_attr(row)
             ovr = score_to_ovr(score, name)
