@@ -3,3 +3,5 @@ pandas
 numpy
 pybaseball
 scikit-learn
+requests
+beautifulsoup4
