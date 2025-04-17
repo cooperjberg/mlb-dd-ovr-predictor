@@ -4,8 +4,8 @@ import requests
 from bs4 import BeautifulSoup
 from pybaseball import batting_stats, pitching_stats
 
-st.set_page_config(page_title="Diamond Dynasty + ShowZone", layout="wide")
-st.title("💎 Diamond Dynasty OVR Tracker with ShowZone Integration")
+st.set_page_config(page_title="Diamond Dynasty + SDS Floors", layout="wide")
+st.title("💎 Diamond Dynasty OVR Tracker with SDS Tier Floors")
 
 @st.cache_data
 def load_data():
@@ -50,12 +50,29 @@ def scrape_showzone_cards(max_pages=2):
 batting_df, pitching_df = load_data()
 showzone_df = scrape_showzone_cards()
 
-def predict_ovr(score):
-    if score >= 0.85: return 90
-    elif score >= 0.75: return 85
-    elif score >= 0.6: return 80
-    elif score >= 0.5: return 75
-    else: return 70
+# SDS tier floor overrides
+tier_floors = {
+    "Corbin Carroll": 80,
+    "Luis Robert Jr.": 80,
+    "Yordan Alvarez": 85,
+    "Ronald Acuna Jr.": 90,
+    "Shohei Ohtani": 90,
+    "Juan Soto": 85,
+    "Freddie Freeman": 85,
+    "Aaron Judge": 90,
+    "Mookie Betts": 85,
+    "Corey Seager": 85,
+    "Gerrit Cole": 85,
+    "Zac Gallen": 80
+}
+
+def predict_ovr(score, player_name):
+    if score >= 0.85: raw_ovr = 90
+    elif score >= 0.75: raw_ovr = 85
+    elif score >= 0.6: raw_ovr = 80
+    elif score >= 0.5: raw_ovr = 75
+    else: raw_ovr = 70
+    return max(raw_ovr, tier_floors.get(player_name, 0))
 
 def quick_sell_value(ovr):
     table = {
@@ -95,14 +112,14 @@ def pitcher_score(row):
 tab1, tab2 = st.tabs(["🎯 Predict One Player", "📈 ShowZone Live Market"])
 
 with tab1:
-    st.subheader("🎯 Predict One Player (Stat + Market Lookup)")
-    search_name = st.text_input("Enter full player name (case sensitive)", value="Cedric Mullins")
+    st.subheader("🎯 Predict One Player (Stat + SDS Floor + Market)")
+    search_name = st.text_input("Enter full player name (case sensitive)", value="Corbin Carroll")
     if search_name:
         found = False
         if search_name in pitching_df["Name"].values:
             row = pitching_df[pitching_df["Name"] == search_name].iloc[0]
             score = pitcher_score(row)
-            ovr = predict_ovr(score)
+            ovr = predict_ovr(score, search_name)
             qs = quick_sell_value(ovr)
             st.success(f"{search_name} (Pitcher)")
             st.metric("ERA", round(row["ERA"], 2))
@@ -114,7 +131,7 @@ with tab1:
         elif search_name in batting_df["Name"].values:
             row = batting_df[batting_df["Name"] == search_name].iloc[0]
             score = hitter_score(row)
-            ovr = predict_ovr(score)
+            ovr = predict_ovr(score, search_name)
             qs = quick_sell_value(ovr)
             st.success(f"{search_name} (Hitter)")
             st.metric("AVG", round(row.get("AVG", 0), 3))
