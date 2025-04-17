@@ -1,3 +1,4 @@
+
 import streamlit as st
 import pandas as pd
 import requests
@@ -125,10 +126,10 @@ with tab1:
             score = hitter_score_attr(row)
             ovr = score_to_ovr(score, name)
             try:
-    ovr_key = int(round(float(ovr)))
-except:
-    ovr_key = 0
-qs = QS.get(ovr_key, 25)
+        ovr_key = int(round(float(ovr)))
+    except:
+        ovr_key = 0
+    qs = QS.get(ovr_key, 25)
             st.success(f"{name} (Hitter)")
             st.write({
                 "Contact RHP": round(row["AVG"],3), "Contact LHP":round(row["AVG"],3),
@@ -146,10 +147,10 @@ qs = QS.get(ovr_key, 25)
             score = pitcher_score_attr(row)
             ovr = score_to_ovr(score, name)
             try:
-    ovr_key = int(round(float(ovr)))
-except:
-    ovr_key = 0
-qs = QS.get(ovr_key, 25)
+        ovr_key = int(round(float(ovr)))
+    except:
+        ovr_key = 0
+    qs = QS.get(ovr_key, 25)
             st.success(f"{name} (Pitcher)")
             st.write({
                 "H/9":round(row["H/9"],2), "K/9":round(row["K/9"],2),
